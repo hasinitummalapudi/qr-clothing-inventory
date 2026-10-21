@@ -1,0 +1,22 @@
+
+{
+  "name": "qr-clothing-inventory",
+  "version": "1.0.0",
+  "description": "QR-Based Clothing Inventory and Sales Tracking System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "html5-qrcode": "^2.3.8",
+    "mongoose": "^9.10.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

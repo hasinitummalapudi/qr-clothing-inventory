@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Product Details</title>
+
+    <style>
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f5f7fa;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 60px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        h1 {
+            color: #111827;
+        }
+
+        .product {
+            text-align: left;
+            margin-top: 25px;
+        }
+
+        .product p {
+            font-size: 18px;
+            margin: 12px 0;
+        }
+
+        .qr {
+            margin-top: 25px;
+        }
+
+        .qr img {
+            width: 220px;
+        }
+
+        .back {
+            display: inline-block;
+            margin-top: 25px;
+            padding: 12px 20px;
+            background: #2563eb;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>Clothing Product</h1>
+
+    <div id="productDetails">
+        Loading product...
+    </div>
+
+    <div class="qr">
+
+        <h3>Product QR Code</h3>
+
+        <img id="qrImage">
+
+    </div>
+
+    <a href="/" class="back">
+        Back to Inventory
+    </a>
+
+</div>
+
+
+<script>
+
+    const params =
+        new URLSearchParams(window.location.search);
+
+    const productId =
+        params.get("id");
+
+
+    async function loadProduct() {
+
+        if (!productId) {
+
+            document.getElementById("productDetails")
+                .innerHTML = "Product ID missing.";
+
+            return;
+
+        }
+
+
+        const response =
+            await fetch(`/api/product/${productId}/qr`);
+
+
+        if (!response.ok) {
+
+            document.getElementById("productDetails")
+                .innerHTML = "Product not found.";
+
+            return;
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        const product =
+            data.product;
+
+
+        document.getElementById("productDetails")
+            .innerHTML = `
+
+                <div class="product">
+
+                    <p>
+                        <strong>Product:</strong>
+                        ${product.name}
+                    </p>
+
+                    <p>
+                        <strong>Category:</strong>
+                        ${product.category}
+                    </p>
+
+                    <p>
+                        <strong>Size:</strong>
+                        ${product.size}
+                    </p>
+
+                    <p>
+                        <strong>Price:</strong>
+                        ₹${product.price}
+                    </p>
+
+                    <p>
+                        <strong>Available Stock:</strong>
+                        ${product.stock}
+                    </p>
+
+                </div>
+
+            `;
+
+
+        document.getElementById("qrImage")
+            .src = data.qrCode;
+
+    }
+
+
+    loadProduct();
+
+</script>
+
+</body>
+
+</html>
