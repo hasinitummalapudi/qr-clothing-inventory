@@ -10,7 +10,8 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
-
+console.log("SESSION_SECRET exists:", Boolean(process.env.SESSION_SECRET));
+console.log("SESSION_SECRET length:", process.env.SESSION_SECRET?.length || 0);
 app.use(session({
     name: "manager.sid",
     secret: process.env.SESSION_SECRET,
