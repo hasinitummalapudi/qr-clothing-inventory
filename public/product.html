@@ -81,71 +81,58 @@
 </div>
 
 
-<script>
+
+
+  
 
   
 <script>
-    const params = new URLSearchParams(window.location.search);
-    const productId = params.get("id");
+const params = new URLSearchParams(window.location.search);
+const productId = params.get("id");
 
-    async function loadProduct() {
-        const details = document.getElementById("productDetails");
+async function loadProduct() {
+    const details = document.getElementById("productDetails");
 
-        if (!productId) {
-            details.textContent = "Product ID is missing.";
-            return;
-        }
-
-        try {
-            const response = await fetch(
-                `/api/product/${encodeURIComponent(productId)}/qr`
-            );
-
-            const data = await response.json();
-
-            if (!response.ok || !data.product) {
-                throw new Error(data.message || "Product not found.");
-            }
-
-            const product = data.product;
-            details.replaceChildren();
-
-            const container = document.createElement("div");
-            container.className = "product";
-
-            const fields = [
-                ["Product", product.name],
-                ["Category", product.category],
-                ["Size", product.size],
-                ["Price", `₹${product.price}`],
-                ["Available Stock", product.stock]
-            ];
-
-            fields.forEach(([label, value]) => {
-                const paragraph = document.createElement("p");
-                const strong = document.createElement("strong");
-
-                strong.textContent = label + ": ";
-                paragraph.appendChild(strong);
-                paragraph.appendChild(
-                    document.createTextNode(String(value ?? "N/A"))
-                );
-
-                container.appendChild(paragraph);
-            });
-
-            details.appendChild(container);
-        } catch (error) {
-            details.textContent =
-                "Unable to load product details. Please try again later.";
-            console.error("Product loading error:", error);
-        }
+    if (!productId) {
+        details.textContent = "Product ID is missing.";
+        return;
     }
 
-    loadProduct();
-</script>
+    try {
+        details.textContent = "Loading product...";
+
+        const response = await fetch(
+            `/api/product/${encodeURIComponent(productId)}/qr`
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || "Product not found.");
+        }
+
+        const product = data.product;
+
+        details.innerHTML = `
+            <div class="product">
+                <p><strong>Product:</strong> ${product.name}</p>
+                <p><strong>Category:</strong> ${product.category}</p>
+                <p><strong>Size:</strong> ${product.size}</p>
+                <p><strong>Price:</strong> ₹${product.price}</p>
+                <p><strong>Available Stock:</strong> ${product.stock}</p>
+            </div>
+        `;
+    } catch (error) {
+        details.textContent = "Unable to load product: " + error.message;
+    }
+}
+
+loadProduct();
+
 
 </script>
+
+
 
 </body>
 
