@@ -316,7 +316,7 @@ app.get("/api/product/:id/qr", async (req, res) => {
     try {
 
         const productURL =
-    `http://192.168.31.3:3000/product.html?id=${product.id}`;
+    `https://qr-clothing-inventory.onrender.com/product.html?id=${product.id}`;
 
         const qrCode =
             await QRCode.toDataURL(productURL);
