@@ -817,6 +817,76 @@ tr:hover td {
     }
 
 }
+/* QR CODE WINDOW */
+.qr-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.qr-modal-content {
+    background: white;
+    border-radius: 18px;
+    padding: 28px;
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+}
+
+.qr-modal-content img {
+    width: 230px;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 20px auto;
+}
+
+.qr-modal-content h2 {
+    margin-top: 0;
+    font-family: "Playfair Display", serif;
+}
+
+.qr-modal-content button {
+    border: none;
+    border-radius: 9px;
+    padding: 11px 18px;
+    margin: 5px;
+    cursor: pointer;
+    background: #202020;
+    color: white;
+}
+
+.qr-modal-content .qr-close {
+    background: #eeeae0;
+    color: #202020;
+}
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    #qrModal,
+    #qrModal * {
+        visibility: visible;
+    }
+
+    #qrModal {
+        display: flex !important;
+        position: absolute;
+        inset: 0;
+        background: white;
+    }
+
+    .qr-modal-content button {
+        display: none;
+    }
+}
 
 </style>
 
@@ -1540,7 +1610,23 @@ tr:hover td {
 
 </div>
 
+<div id="qrModal" class="qr-modal">
+    <div class="qr-modal-content">
+        <h2 id="qrProductName">Product QR Code</h2>
 
+        <p>Scan this QR code to view product details.</p>
+
+        <img id="qrImage" src="" alt="Product QR Code">
+
+        <p id="qrStatus"></p>
+
+        <button onclick="window.print()">Print QR</button>
+
+        <button class="qr-close" onclick="closeQR()">
+            Close
+        </button>
+    </div>
+</div>
 <script>
 
 /* =========================
@@ -1828,14 +1914,41 @@ function escapeProductName(name) {
    OPEN QR
 ========================= */
 
-function openQR(productId) {
+async function openQR(productId) {
+    const modal = document.getElementById("qrModal");
+    const image = document.getElementById("qrImage");
+    const name = document.getElementById("qrProductName");
+    const status = document.getElementById("qrStatus");
 
-    window.open(
-        "/product.html?id=" + productId,
-        "_blank"
-    );
+    modal.style.display = "flex";
+    image.style.display = "none";
+    name.textContent = "Generating QR...";
+    status.textContent = "Please wait.";
 
+    try {
+        const response = await fetch(`/api/product/${productId}/qr`);
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || "Could not generate QR.");
+        }
+
+        name.textContent = data.product.name;
+        image.src = data.qrCode;
+        image.style.display = "block";
+        status.textContent =
+            `ID: ${data.product.id} | Size: ${data.product.size} | Price: ₹${data.product.price}`;
+    } catch (error) {
+        name.textContent = "QR generation failed";
+        status.textContent = error.message;
+    }
 }
+
+function closeQR() {
+    document.getElementById("qrModal").style.display = "none";
+}
+
+
 
 
 /* =========================
