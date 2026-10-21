@@ -1,0 +1,152 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manager Login | QR Clothing Inventory</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f3f4f6;
+            font-family: Arial, sans-serif;
+        }
+
+        .login-box {
+            width: 90%;
+            max-width: 380px;
+            padding: 30px;
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            margin-bottom: 8px;
+            text-align: center;
+            color: #111827;
+            font-size: 25px;
+        }
+
+        .subtitle {
+            margin-bottom: 25px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        label {
+            display: block;
+            margin: 15px 0 7px;
+            font-weight: bold;
+            color: #374151;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 7px;
+            font-size: 15px;
+        }
+
+        button {
+            width: 100%;
+            margin-top: 22px;
+            padding: 13px;
+            border: none;
+            border-radius: 7px;
+            background: #111827;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #374151;
+        }
+
+        #message {
+            margin-top: 15px;
+            color: #dc2626;
+            text-align: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="login-box">
+        <h1>Manager Login</h1>
+        <p class="subtitle">QR Clothing Inventory</p>
+
+        <form id="loginForm">
+            <label for="username">Username</label>
+            <input
+                id="username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                required
+            >
+
+            <label for="password">Password</label>
+            <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+            >
+
+            <button type="submit">Login</button>
+            <p id="message" role="alert"></p>
+        </form>
+    </main>
+
+    <script>
+        document.getElementById("loginForm")
+            .addEventListener("submit", async function (event) {
+                event.preventDefault();
+
+                const message = document.getElementById("message");
+                message.textContent = "";
+
+                try {
+                    const response = await fetch("/api/login", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        credentials: "same-origin",
+                        body: JSON.stringify({
+                            username: document.getElementById("username").value,
+                            password: document.getElementById("password").value
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        window.location.href = "/";
+                    } else {
+                        message.textContent =
+                            result.message || "Login failed. Try again.";
+                    }
+                } catch (error) {
+                    message.textContent =
+                        "Unable to connect. Please try again.";
+                }
+            });
+    </script>
+</body>
+</html>

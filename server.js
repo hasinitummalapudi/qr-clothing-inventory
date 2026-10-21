@@ -2,20 +2,36 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const QRCode = require("qrcode");
+const session = require("express-session");
+const bcrypt = require("bcryptjs");
+
 
 const app = express();
 const PORT = 3000;
 
-app.use(cors());
 app.use(express.json());
 
-app.use(express.static(path.join(__dirname, "public")));
-
+app.use(session({
+    name: "manager.sid",
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 2 * 60 * 60 * 1000
+    }
+}));
 /* =========================================================
    INVENTORY DATA
 ========================================================= */
 
 let inventory = [
+
+
+
+
     {
         id: 1,
         name: "Black T-Shirt",
@@ -49,19 +65,140 @@ const LOW_STOCK_LIMIT = 5;
 const LOW_SALES_LIMIT = 5;
 const MODERATE_SALES_LIMIT = 15;
 
+
+/* =========================================================
+   MANAGER LOGIN AND LOGOUT
+========================================================= */
+
+app.get("/login.html", (req, res) => {
+    if (req.session.managerAuthenticated) {
+        return res.redirect("/");
+    }
+
+    res.sendFile(path.join(__dirname, "public", "login.html"));
+});
+
+app.post("/api/login", (req, res) => {
+    const { username, password } = req.body;
+
+    if (
+        !process.env.MANAGER_USERNAME ||
+        !process.env.MANAGER_PASSWORD ||
+        !process.env.SESSION_SECRET
+    ) {
+        return res.status(500).json({
+            message: "Login settings are not configured."
+        });
+    }
+
+    if (
+        typeof username !== "string" ||
+        typeof password !== "string" ||
+        username !== process.env.MANAGER_USERNAME ||
+        password !== process.env.MANAGER_PASSWORD
+    ) {
+        return res.status(401).json({
+            message: "Incorrect username or password."
+        });
+    }
+
+    req.session.regenerate((error) => {
+        if (error) {
+            return res.status(500).json({
+                message: "Unable to start your session."
+            });
+        }
+
+        req.session.managerAuthenticated = true;
+
+        req.session.save((error) => {
+            if (error) {
+                return res.status(500).json({
+                    message: "Unable to save your session."
+                });
+            }
+
+            res.json({ message: "Login successful." });
+        });
+    });
+});
+
+app.post("/api/logout", (req, res) => {
+    req.session.destroy((error) => {
+        if (error) {
+            return res.status(500).json({
+                message: "Logout failed."
+            });
+        }
+
+        res.clearCookie("manager.sid", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/"
+        });
+
+        res.json({ message: "Logged out successfully." });
+    });
+});
+
 /* =========================================================
    HOME PAGE
 ========================================================= */
 
 app.get("/", (req, res) => {
+    if (!req.session.managerAuthenticated) {
+        return res.redirect("/login.html");
+    }
+
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
+
+app.use((req, res, next) => {
+    if (req.path === "/index.html") {
+        return res.redirect("/");
+    }
+
+    next();
+});
+
+app.use(express.static(path.join(__dirname, "public"), {
+    index: false,
+    setHeaders: (res, filePath) => {
+        if (path.basename(filePath) === "index.html") {
+            res.setHeader("Cache-Control", "no-store");
+        }
+    }
+}));
+app.get("/index.html", (req, res) => {
+    if (!req.session.managerAuthenticated) {
+        return res.redirect("/login.html");
+    }
+
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+
+/* =========================================================
+   PROTECT MANAGER API ROUTES
+========================================================= */
+
+function requireManager(req, res, next) {
+    if (req.session && req.session.managerAuthenticated === true) {
+        return next();
+    }
+
+    return res.status(401).json({
+        message: "Please log in as the manager first."
+    });
+}
+
 
 /* =========================================================
    GET INVENTORY
 ========================================================= */
 
-app.get("/api/inventory", (req, res) => {
+app.get("/api/inventory", requireManager, (req, res) => {
 
     const inventoryWithSales = inventory.map(product => {
 
@@ -148,7 +285,7 @@ app.post("/api/inventory", (req, res) => {
    DELETE PRODUCT
 ========================================================= */
 
-app.delete("/api/inventory/:id", (req, res) => {
+app.delete("/api/inventory/:id", requireManager, (req, res) => {
 
     const productId = Number(req.params.id);
 
@@ -185,7 +322,7 @@ app.delete("/api/inventory/:id", (req, res) => {
    DASHBOARD STATISTICS
 ========================================================= */
 
-app.get("/api/dashboard", (req, res) => {
+app.get("/api/dashboard", requireManager, (req, res) => {
 
     const totalProducts = inventory.length;
 
@@ -232,7 +369,7 @@ app.get("/api/dashboard", (req, res) => {
    CREATE SALE
 ========================================================= */
 
-app.post("/api/sales", (req, res) => {
+app.post("/api/sales", requireManager, (req, res) => {
 
     const { productId, quantity } = req.body;
 
@@ -291,7 +428,7 @@ app.post("/api/sales", (req, res) => {
    GET SALES
 ========================================================= */
 
-app.get("/api/sales", (req, res) => {
+app.get("/api/sales", requireManager, (req, res) => {
     res.json(sales);
 });
 
@@ -322,9 +459,16 @@ app.get("/api/product/:id/qr", async (req, res) => {
             await QRCode.toDataURL(productURL);
 
         res.json({
-            product,
-            qrCode
-        });
+    product: {
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        size: product.size,
+        price: product.price,
+        stock: product.stock
+    },
+    qrCode
+});
 
     } catch (error) {
 
