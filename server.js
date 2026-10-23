@@ -4,7 +4,7 @@ const cors = require("cors");
 const path = require("path");
 const QRCode = require("qrcode");
 const session = require("express-session");
-
+const { createClient } = require("@supabase/supabase-js");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -13,6 +13,31 @@ app.set("trust proxy", 1);
 
 app.use(cors());
 app.use(express.json());
+// Supabase database connection
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
+    console.error("Supabase environment variables are missing.");
+    process.exit(1);
+}
+
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SECRET_KEY
+);
+
+console.log("Supabase client configured.");
+
+supabase
+    .from("products")
+    .select("id")
+    .limit(1)
+    .then(({ data, error }) => {
+        if (error) {
+            console.error("Supabase connection test failed:", error.message);
+        } else {
+            console.log("Supabase database test successful!");
+            console.log("Product records found:", data.length);
+        }
+    });
 
 // Check session configuration before starting
 if (!process.env.SESSION_SECRET) {
