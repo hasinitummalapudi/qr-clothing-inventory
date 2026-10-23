@@ -1,4 +1,4 @@
-
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -63,28 +63,7 @@ app.use(session({
     }
 }));
 
-// INVENTORY DATA
-let inventory = [
-    {
-        id: 1,
-        name: "Black T-Shirt",
-        category: "T-Shirt",
-        size: "M",
-        price: 799,
-        stock: 20
-    },
-    {
-        id: 2,
-        name: "Blue Jeans",
-        category: "Jeans",
-        size: "30",
-        price: 1499,
-        stock: 15
-    }
-];
 
-// SALES DATA
-let sales = [];
 
 const LOW_STOCK_LIMIT = 5;
 const LOW_SALES_LIMIT = 5;
@@ -201,45 +180,77 @@ function requireManager(req, res, next) {
 }
 
 // GET INVENTORY
-app.get("/api/inventory", requireManager, (req, res) => {
-    const inventoryWithSales = inventory.map(product => {
-        const totalSold = sales
-            .filter(sale => sale.productId === product.id)
-            .reduce((total, sale) => total + sale.quantity, 0);
 
-        let stockStatus;
+app.get("/api/inventory", requireManager, async (req, res) => {
+    try {
+        const { data: products, error } = await supabase
+            .from("products")
+            .select("id, name, category, size, price, stock")
+            .order("id", { ascending: true });
 
-        if (product.stock === 0) {
-            stockStatus = "Out of Stock";
-        } else if (product.stock <= LOW_STOCK_LIMIT) {
-            stockStatus = "Low Stock";
-        } else {
-            stockStatus = "In Stock";
+        if (error) {
+            console.error("Inventory fetch error:", error.message);
+            return res.status(500).json({
+                message: "Unable to load inventory."
+            });
         }
 
-        let salesStatus;
+        const { data: salesData, error: salesError } = await supabase
+            .from("sales")
+            .select("product_id, quantity");
 
-        if (totalSold <= LOW_SALES_LIMIT) {
-            salesStatus = "Low Sales";
-        } else if (totalSold <= MODERATE_SALES_LIMIT) {
-            salesStatus = "Moderate Sales";
-        } else {
-            salesStatus = "Good Sales";
+        if (salesError) {
+            console.error("Sales fetch error:", salesError.message);
+            return res.status(500).json({
+                message: "Unable to load sales data."
+            });
         }
 
-        return {
-            ...product,
-            totalSold,
-            stockStatus,
-            salesStatus
-        };
-    });
+        const inventoryWithSales = products.map(product => {
+            const totalSold = salesData
+                .filter(sale => sale.product_id === product.id)
+                .reduce((total, sale) => total + sale.quantity, 0);
 
-    res.json(inventoryWithSales);
+            let stockStatus;
+
+            if (product.stock === 0) {
+                stockStatus = "Out of Stock";
+            } else if (product.stock <= LOW_STOCK_LIMIT) {
+                stockStatus = "Low Stock";
+            } else {
+                stockStatus = "In Stock";
+            }
+
+            let salesStatus;
+
+            if (totalSold <= LOW_SALES_LIMIT) {
+                salesStatus = "Low Sales";
+            } else if (totalSold <= MODERATE_SALES_LIMIT) {
+                salesStatus = "Moderate Sales";
+            } else {
+                salesStatus = "Good Sales";
+            }
+
+            return {
+                ...product,
+                totalSold,
+                stockStatus,
+                salesStatus
+            };
+        });
+
+        res.json(inventoryWithSales);
+    } catch (error) {
+        console.error("Inventory error:", error.message);
+        res.status(500).json({
+            message: "Server error while loading inventory."
+        });
+    }
 });
 
 // ADD INVENTORY ITEM
-app.post("/api/inventory", requireManager, (req, res) => {
+
+app.post("/api/inventory", requireManager, async (req, res) => {
     const { name, category, size, price, stock } = req.body || {};
 
     if (
@@ -258,100 +269,174 @@ app.post("/api/inventory", requireManager, (req, res) => {
         });
     }
 
-    const newId = inventory.length > 0
-        ? Math.max(...inventory.map(item => item.id)) + 1
-        : 1;
+    try {
+        const { data: newItem, error } = await supabase
+            .from("products")
+            .insert([{
+                name: name.trim(),
+                category: category.trim(),
+                size: size.trim(),
+                price: Number(price),
+                stock: Number(stock)
+            }])
+            .select("id, name, category, size, price, stock")
+            .single();
 
-    const newItem = {
-        id: newId,
-        name,
-        category,
-        size,
-        price: Number(price),
-        stock: Number(stock)
-    };
+        if (error) {
+            console.error("Add product error:", error.message);
+            return res.status(500).json({
+                message: "Unable to add product."
+            });
+        }
 
-    inventory.push(newItem);
-
-    res.json({
-        message: "Item added successfully",
-        item: newItem
-    });
+        res.json({
+            message: "Item added successfully",
+            item: newItem
+        });
+    } catch (error) {
+        console.error("Add product error:", error.message);
+        res.status(500).json({
+            message: "Server error while adding product."
+        });
+    }
 });
 
 // DELETE PRODUCT
-app.delete("/api/inventory/:id", requireManager, (req, res) => {
+
+app.delete("/api/inventory/:id", requireManager, async (req, res) => {
     const productId = Number(req.params.id);
 
-    const productIndex = inventory.findIndex(
-        item => item.id === productId
-    );
-
-    if (productIndex === -1) {
-        return res.status(404).json({
-            message: "Product not found"
+    if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({
+            message: "Invalid product ID."
         });
     }
 
-    const deletedProduct = inventory[productIndex];
-    inventory.splice(productIndex, 1);
+    try {
+        // Check whether the product exists
+        const { data: product, error: fetchError } = await supabase
+            .from("products")
+            .select("id, name, category, size, price, stock")
+            .eq("id", productId)
+            .maybeSingle();
 
-    res.json({
-        message: "Product deleted successfully",
-        product: deletedProduct
-    });
+        if (fetchError) {
+            console.error("Find product error:", fetchError.message);
+            return res.status(500).json({
+                message: "Unable to find product."
+            });
+        }
+
+        if (!product) {
+            return res.status(404).json({
+                message: "Product not found."
+            });
+        }
+
+        // Delete the product from Supabase
+        const { error: deleteError } = await supabase
+            .from("products")
+            .delete()
+            .eq("id", productId);
+
+        if (deleteError) {
+            console.error("Delete product error:", deleteError.message);
+            return res.status(500).json({
+                message: "Unable to delete product."
+            });
+        }
+
+        res.json({
+            message: "Product deleted successfully",
+            product
+        });
+    } catch (error) {
+        console.error("Delete product error:", error.message);
+        res.status(500).json({
+            message: "Server error while deleting product."
+        });
+    }
 });
 
+
 // DASHBOARD STATISTICS
-app.get("/api/dashboard", requireManager, (req, res) => {
-    const totalProducts = inventory.length;
 
-    const totalStock = inventory.reduce(
-        (total, item) => total + item.stock,
-        0
-    );
+app.get("/api/dashboard", requireManager, async (req, res) => {
+    try {
+        const { data: products, error: productsError } = await supabase
+            .from("products")
+            .select("id, stock");
 
-    const totalSales = sales.reduce(
-        (total, sale) => total + sale.total,
-        0
-    );
+        if (productsError) {
+            console.error("Dashboard products error:", productsError.message);
+            return res.status(500).json({
+                message: "Unable to load dashboard products."
+            });
+        }
 
-    const lowStock = inventory.filter(
-        item => item.stock <= LOW_STOCK_LIMIT
-    ).length;
+        const { data: salesData, error: salesError } = await supabase
+            .from("sales")
+            .select("product_id, quantity, total");
 
-    const lowSales = inventory.filter(product => {
-        const totalSold = sales
-            .filter(sale => sale.productId === product.id)
-            .reduce((total, sale) => total + sale.quantity, 0);
+        if (salesError) {
+            console.error("Dashboard sales error:", salesError.message);
+            return res.status(500).json({
+                message: "Unable to load dashboard sales."
+            });
+        }
 
-        return totalSold <= LOW_SALES_LIMIT;
-    }).length;
+        const totalProducts = products.length;
 
-    res.json({
-        totalProducts,
-        totalStock,
-        totalSales,
-        lowStock,
-        lowSales
-    });
+        const totalStock = products.reduce(
+            (total, item) => total + item.stock,
+            0
+        );
+
+        const totalSales = salesData.reduce(
+            (total, sale) => total + Number(sale.total),
+            0
+        );
+
+        const lowStock = products.filter(
+            item => item.stock <= LOW_STOCK_LIMIT
+        ).length;
+
+        const lowSales = products.filter(product => {
+            const totalSold = salesData
+                .filter(sale => sale.product_id === product.id)
+                .reduce((total, sale) => total + sale.quantity, 0);
+
+            return totalSold <= LOW_SALES_LIMIT;
+        }).length;
+
+        res.json({
+            totalProducts,
+            totalStock,
+            totalSales,
+            lowStock,
+            lowSales
+        });
+    } catch (error) {
+        console.error("Dashboard error:", error.message);
+        res.status(500).json({
+            message: "Server error while loading dashboard."
+        });
+    }
 });
 
 // CREATE SALE
-app.post("/api/sales", requireManager, (req, res) => {
+
+app.post("/api/sales", requireManager, async (req, res) => {
     const { productId, quantity } = req.body || {};
 
-    const product = inventory.find(
-        item => item.id === Number(productId)
-    );
+    const id = Number(productId);
+    const saleQuantity = Number(quantity);
 
-    if (!product) {
-        return res.status(404).json({
-            message: "Product not found"
+    if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({
+            message: "Invalid product ID."
         });
     }
-
-    const saleQuantity = Number(quantity);
 
     if (!Number.isInteger(saleQuantity) || saleQuantity <= 0) {
         return res.status(400).json({
@@ -359,53 +444,175 @@ app.post("/api/sales", requireManager, (req, res) => {
         });
     }
 
-    if (product.stock < saleQuantity) {
-        return res.status(400).json({
-            message: "Not enough stock."
+    try {
+        const { data: product, error: productError } = await supabase
+            .from("products")
+            .select("id, name, category, size, price, stock")
+            .eq("id", id)
+            .maybeSingle();
+
+        if (productError) {
+            console.error("Find product error:", productError.message);
+            return res.status(500).json({
+                message: "Unable to retrieve product."
+            });
+        }
+
+        if (!product) {
+            return res.status(404).json({
+                message: "Product not found."
+            });
+        }
+
+        if (product.stock < saleQuantity) {
+            return res.status(400).json({
+                message: "Not enough stock."
+            });
+        }
+
+        const newStock = product.stock - saleQuantity;
+        const saleTotal = Number(product.price) * saleQuantity;
+
+        // Update the product stock in Supabase
+        const { data: updatedProduct, error: updateError } = await supabase
+            .from("products")
+            .update({ stock: newStock })
+            .eq("id", id)
+            .eq("stock", product.stock)
+            .select("id")
+            .maybeSingle();
+
+        if (updateError) {
+            console.error("Stock update error:", updateError.message);
+            return res.status(500).json({
+                message: "Unable to update product stock."
+            });
+        }
+
+        if (!updatedProduct) {
+            return res.status(409).json({
+                message: "Stock changed. Please refresh and try again."
+            });
+        }
+
+        // Save the sale in Supabase
+        const { data: savedSale, error: saleError } = await supabase
+            .from("sales")
+            .insert([{
+                product_id: product.id,
+                product_name: product.name,
+                quantity: saleQuantity,
+                total: saleTotal
+            }])
+            .select("id, product_id, product_name, quantity, total, created_at")
+            .single();
+
+        if (saleError) {
+            console.error("Save sale error:", saleError.message);
+
+            // Restore stock if saving the sale fails
+            const { error: restoreError } = await supabase
+                .from("products")
+                .update({ stock: product.stock })
+                .eq("id", id)
+                .eq("stock", newStock);
+
+            if (restoreError) {
+                console.error("Stock restore error:", restoreError.message);
+            }
+
+            return res.status(500).json({
+                message: "Unable to save sale."
+            });
+        }
+
+        res.json({
+            message: "Sale completed successfully",
+            sale: {
+                id: savedSale.id,
+                productId: savedSale.product_id,
+                productName: savedSale.product_name,
+                quantity: savedSale.quantity,
+                total: Number(savedSale.total),
+                date: savedSale.created_at
+            }
+        });
+    } catch (error) {
+        console.error("Sales error:", error.message);
+        res.status(500).json({
+            message: "Server error while processing sale."
         });
     }
-
-    product.stock -= saleQuantity;
-
-    const sale = {
-        id: sales.length > 0
-            ? Math.max(...sales.map(item => item.id)) + 1
-            : 1,
-        productId: product.id,
-        productName: product.name,
-        quantity: saleQuantity,
-        total: product.price * saleQuantity,
-        date: new Date().toLocaleString()
-    };
-
-    sales.push(sale);
-
-    res.json({
-        message: "Sale completed successfully",
-        sale
-    });
 });
+
 
 // GET SALES
-app.get("/api/sales", requireManager, (req, res) => {
-    res.json(sales);
+
+app.get("/api/sales", requireManager, async (req, res) => {
+    try {
+        const { data: salesData, error } = await supabase
+            .from("sales")
+            .select("id, product_id, product_name, quantity, total, created_at")
+            .order("created_at", { ascending: false });
+
+        if (error) {
+            console.error("Fetch sales error:", error.message);
+            return res.status(500).json({
+                message: "Unable to load sales history."
+            });
+        }
+
+        const formattedSales = salesData.map(sale => ({
+            id: sale.id,
+            productId: sale.product_id,
+            productName: sale.product_name,
+            quantity: sale.quantity,
+            total: Number(sale.total),
+            date: sale.created_at
+        }));
+
+        res.json(formattedSales);
+    } catch (error) {
+        console.error("Sales history error:", error.message);
+        res.status(500).json({
+            message: "Server error while loading sales history."
+        });
+    }
 });
 
+
 // PUBLIC QR CODE GENERATION
+
 app.get("/api/product/:id/qr", async (req, res) => {
     const productId = Number(req.params.id);
 
-    const product = inventory.find(
-        item => item.id === productId
-    );
-
-    if (!product) {
-        return res.status(404).json({
-            message: "Product not found"
+    if (!Number.isInteger(productId) || productId <= 0) {
+        return res.status(400).json({
+            message: "Invalid product ID."
         });
     }
 
     try {
+        const { data: product, error } = await supabase
+            .from("products")
+            .select("id, name, category, size, price, stock")
+            .eq("id", productId)
+            .maybeSingle();
+
+        if (error) {
+            console.error("QR product lookup failed:", error.message);
+            return res.status(500).json({
+                message: "Unable to load product details."
+            });
+        }
+
+        if (!product) {
+            return res.status(404).json({
+                message: "Product not found."
+            });
+        }
+
+        // Keep the existing QR URL unchanged
         const productURL =
             `https://qr-clothing-inventory.onrender.com/product.html?id=${product.id}`;
 
@@ -417,21 +624,19 @@ app.get("/api/product/:id/qr", async (req, res) => {
                 name: product.name,
                 category: product.category,
                 size: product.size,
-                price: product.price,
+                price: Number(product.price),
                 stock: product.stock
             },
             qrCode
         });
     } catch (error) {
-        console.error("QR generation failed:", error);
+        console.error("QR generation failed:", error.message);
 
         res.status(500).json({
-            message: "QR generation failed"
+            message: "QR generation failed."
         });
     }
 });
-
-// START SERVER
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server listening on port ${PORT}`);
 });

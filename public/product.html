@@ -1,26 +1,22 @@
+
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
-
-    <title>Product Details</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THREADLY - Product Details</title>
 
     <style>
-
         body {
             margin: 0;
             font-family: Arial, sans-serif;
             background: #f5f7fa;
+            color: #111827;
         }
 
         .container {
             max-width: 600px;
-            margin: 60px auto;
+            margin: 40px auto;
             padding: 30px;
             background: white;
             border-radius: 12px;
@@ -28,112 +24,172 @@
             text-align: center;
         }
 
-        h1 {
-            color: #111827;
-        }
+        h1 { color: #111827; }
 
         .product {
             text-align: left;
             margin-top: 25px;
+            padding: 18px;
+            background: #f9fafb;
+            border-radius: 10px;
         }
 
         .product p {
             font-size: 18px;
-            margin: 12px 0;
+            margin: 14px 0;
+            overflow-wrap: anywhere;
         }
 
-        .qr {
-            margin-top: 25px;
+        .stock {
+            color: #047857;
+            font-weight: bold;
+            font-size: 22px !important;
         }
 
-        .qr img {
-            width: 220px;
+        .out {
+            color: #dc2626;
         }
 
-        .back {
-            display: inline-block;
-            margin-top: 25px;
+        button {
+            margin-top: 20px;
             padding: 12px 20px;
             background: #2563eb;
             color: white;
-            text-decoration: none;
+            border: none;
             border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
         }
 
-    </style>
+        button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
 
+        #updated {
+            color: #6b7280;
+            font-size: 13px;
+            margin-top: 14px;
+        }
+
+        @media (max-width: 650px) {
+            .container {
+                margin: 20px 12px;
+                padding: 20px;
+            }
+        }
+    </style>
 </head>
 
 <body>
-
 <div class="container">
+    <h1>THREADLY</h1>
+    <h2>Product Details</h2>
 
-    <h1>Clothing Product</h1>
-
-    <div id="productDetails">
+    <div id="productDetails" aria-live="polite">
         Loading product...
     </div>
 
-    
+    <button id="refreshButton" type="button" onclick="loadProduct()">
+        Refresh Stock
+    </button>
 
-   
-
+    <p id="updated">Fetching latest inventory...</p>
 </div>
 
-
-
-
-  
-
-  
 <script>
-const params = new URLSearchParams(window.location.search);
-const productId = params.get("id");
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get("id");
 
-async function loadProduct() {
-    const details = document.getElementById("productDetails");
+    async function loadProduct() {
+        const details = document.getElementById("productDetails");
+        const updated = document.getElementById("updated");
+        const button = document.getElementById("refreshButton");
 
-    if (!productId) {
-        details.textContent = "Product ID is missing.";
-        return;
-    }
-
-    try {
-        details.textContent = "Loading product...";
-
-        const response = await fetch(
-            `/api/product/${encodeURIComponent(productId)}/qr`
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.message || "Product not found.");
+        if (!productId) {
+            details.textContent = "Product ID is missing.";
+            updated.textContent = "";
+            return;
         }
 
-        const product = data.product;
+        button.disabled = true;
+        button.textContent = "Refreshing...";
+        updated.textContent = "Fetching latest stock...";
 
-        details.innerHTML = `
-            <div class="product">
-                <p><strong>Product:</strong> ${product.name}</p>
-                <p><strong>Category:</strong> ${product.category}</p>
-                <p><strong>Size:</strong> ${product.size}</p>
-                <p><strong>Price:</strong> ₹${product.price}</p>
-                <p><strong>Available Stock:</strong> ${product.stock}</p>
-            </div>
-        `;
-    } catch (error) {
-        details.textContent = "Unable to load product: " + error.message;
+        try {
+            const response = await fetch(
+                `/api/product/${encodeURIComponent(productId)}/qr?t=${Date.now()}`,
+                { cache: "no-store" }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || "Product not found.");
+            }
+
+            const product = data.product;
+
+            if (!product) {
+                throw new Error("Product details were not returned.");
+            }
+
+            // Use textContent so product data is not inserted as HTML.
+            details.replaceChildren();
+
+            const card = document.createElement("div");
+            card.className = "product";
+
+            function addLine(label, value, className = "") {
+                const p = document.createElement("p");
+                if (className) p.className = className;
+
+                const strong = document.createElement("strong");
+                strong.textContent = label + ": ";
+
+                p.appendChild(strong);
+                p.appendChild(document.createTextNode(String(value ?? "—")));
+                card.appendChild(p);
+            }
+
+            addLine("Product", product.name);
+            addLine("Category", product.category);
+            addLine("Size", product.size);
+            addLine("Price", "₹" + product.price);
+
+            const stock = Number(product.stock);
+            addLine(
+                "Available Stock",
+                Number.isFinite(stock) ? stock : "Unavailable",
+                Number.isFinite(stock) && stock <= 0
+                    ? "stock out"
+                    : "stock"
+            );
+
+            details.appendChild(card);
+
+            updated.textContent =
+                "Stock checked at " + new Date().toLocaleTimeString();
+
+        } catch (error) {
+            details.textContent = "Unable to load product. Please try again.";
+            updated.textContent = error.message;
+        } finally {
+            button.disabled = false;
+            button.textContent = "Refresh Stock";
+        }
     }
-}
 
-loadProduct();
+    // Load current stock when the QR page opens.
+    loadProduct();
 
+    // Automatically check for stock changes every 10 seconds.
+    setInterval(loadProduct, 10000);
 
+    // Refresh when a customer returns to this browser tab.
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) loadProduct();
+    });
 </script>
-
-
-
 </body>
-
 </html>
