@@ -186,6 +186,7 @@ app.get("/api/inventory", requireManager, async (req, res) => {
         const { data: products, error } = await supabase
             .from("products")
             .select("id, name, category, size, price, stock")
+            .eq("is_active", true)
             .order("id", { ascending: true });
 
         if (error) {
@@ -318,6 +319,7 @@ app.delete("/api/inventory/:id", requireManager, async (req, res) => {
             .from("products")
             .select("id, name, category, size, price, stock")
             .eq("id", productId)
+            .eq("is_active", true)
             .maybeSingle();
 
         if (fetchError) {
@@ -333,30 +335,30 @@ app.delete("/api/inventory/:id", requireManager, async (req, res) => {
             });
         }
 
-        // Delete the product from Supabase
-        // Return the deleted row so we can verify that Supabase actually
-        // removed the requested product (rather than silently deleting zero rows).
-        const { data: deletedRows, error: deleteError } = await supabase
+        // Soft-delete: hide the product from active inventory while keeping
+        // the product row so existing sales foreign keys and sales history remain valid.
+        const { data: updatedRows, error: updateError } = await supabase
             .from("products")
-            .delete()
+            .update({ is_active: false })
             .eq("id", productId)
+            .eq("is_active", true)
             .select("id");
 
-        if (deleteError) {
-            console.error("Delete product error:", deleteError);
+        if (updateError) {
+            console.error("Archive product error:", updateError);
             return res.status(500).json({
-                message: deleteError.message || "Unable to delete product."
+                message: updateError.message || "Unable to remove product from inventory."
             });
         }
 
-        if (!deletedRows || deletedRows.length === 0) {
+        if (!updatedRows || updatedRows.length === 0) {
             return res.status(404).json({
-                message: "Product was not deleted. Please refresh the inventory and try again."
+                message: "Product is already removed from inventory. Please refresh."
             });
         }
 
         return res.json({
-            message: "Product deleted successfully",
+            message: "Product removed from active inventory. Sales history has been preserved.",
             product
         });
     } catch (error) {
@@ -374,7 +376,8 @@ app.get("/api/dashboard", requireManager, async (req, res) => {
     try {
         const { data: products, error: productsError } = await supabase
             .from("products")
-            .select("id, stock");
+            .select("id, stock")
+            .eq("is_active", true);
 
         if (productsError) {
             console.error("Dashboard products error:", productsError.message);
@@ -458,6 +461,7 @@ app.post("/api/sales", requireManager, async (req, res) => {
             .from("products")
             .select("id, name, category, size, price, stock")
             .eq("id", id)
+            .eq("is_active", true)
             .maybeSingle();
 
         if (productError) {
