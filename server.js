@@ -334,19 +334,28 @@ app.delete("/api/inventory/:id", requireManager, async (req, res) => {
         }
 
         // Delete the product from Supabase
-        const { error: deleteError } = await supabase
+        // Return the deleted row so we can verify that Supabase actually
+        // removed the requested product (rather than silently deleting zero rows).
+        const { data: deletedRows, error: deleteError } = await supabase
             .from("products")
             .delete()
-            .eq("id", productId);
+            .eq("id", productId)
+            .select("id");
 
         if (deleteError) {
-            console.error("Delete product error:", deleteError.message);
+            console.error("Delete product error:", deleteError);
             return res.status(500).json({
-                message: "Unable to delete product."
+                message: deleteError.message || "Unable to delete product."
             });
         }
 
-        res.json({
+        if (!deletedRows || deletedRows.length === 0) {
+            return res.status(404).json({
+                message: "Product was not deleted. Please refresh the inventory and try again."
+            });
+        }
+
+        return res.json({
             message: "Product deleted successfully",
             product
         });

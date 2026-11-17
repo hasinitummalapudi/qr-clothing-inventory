@@ -1976,15 +1976,18 @@ async function deleteProduct(productId, productName) {
 
         const response =
             await fetch(
-                "/api/inventory/" + productId,
+                "/api/inventory/" + encodeURIComponent(productId),
                 {
-                    method: "DELETE"
+                    method: "DELETE",
+                    credentials: "same-origin",
+                    headers: {
+                        "Accept": "application/json"
+                    }
                 }
             );
 
 
-        const data =
-            await response.json();
+        const data = await response.json();
 
 
         if (!response.ok) {
@@ -2004,13 +2007,13 @@ async function deleteProduct(productId, productName) {
 
 
         // Refresh product table
-        loadInventory();
+        await loadInventory();
 
         // Refresh dashboard
-        loadDashboard();
+        await loadDashboard();
 
         // Refresh billing product list
-        loadBillingProducts();
+        await loadBillingProducts();
 
     }
 
